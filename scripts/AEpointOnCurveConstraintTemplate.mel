@@ -1,0 +1,41 @@
+global proc AEpointOnCurveConstraintTemplate(string $nodeName)
+{
+    
+    editorTemplate -beginScrollLayout;
+        
+		editorTemplate -beginLayout "Constraint Attributes" -collapse false;
+
+			editorTemplate -addControl "lockOutput";
+
+			editorTemplate -addControl "twist";
+            editorTemplate -addControl "forwardVector";
+			editorTemplate -addControl "upVector";
+			editorTemplate -addControl "worldUpType";
+			editorTemplate -addControl "worldUpVector";
+			
+			editorTemplate -addControl "offsetTranslate";
+			editorTemplate -addControl "offsetRotate";
+			
+			editorTemplate -addControl "constraintTranslate";
+			editorTemplate -addControl "constraintRotate";
+			
+			editorTemplate -addControl "enableRestPosition";
+			editorTemplate -addControl "restTranslate";
+			editorTemplate -addControl "restRotate";
+			
+		editorTemplate -endLayout;
+		
+        AEtransformMain($nodeName);
+        AEtransformNoScroll($nodeName);
+        
+        editorTemplate -addExtraControls;
+		
+		editorTemplate -suppress "target";
+		editorTemplate -suppress "worldUpMatrix";
+		editorTemplate -suppress "constraintRotateOrder";
+		editorTemplate -suppress "constraintJointOrient";
+		editorTemplate -suppress "constraintParentInverseMatrix";
+        
+    editorTemplate -endScrollLayout;
+    
+}
