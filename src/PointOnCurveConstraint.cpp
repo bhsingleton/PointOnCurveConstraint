@@ -9,6 +9,9 @@
 #include "PointOnCurveConstraint.h"
 
 
+MObject PointOnCurveConstraint::parameter;
+MObject PointOnCurveConstraint::useFraction;
+MObject PointOnCurveConstraint::loop;
 MObject PointOnCurveConstraint::forwardVector;
 MObject PointOnCurveConstraint::forwardVectorX;
 MObject PointOnCurveConstraint::forwardVectorY;
@@ -43,9 +46,9 @@ MObject PointOnCurveConstraint::restRotateZ;
 
 MObject PointOnCurveConstraint::target;
 MObject PointOnCurveConstraint::targetWeight;
+MObject PointOnCurveConstraint::targetOverrideParameter;
 MObject PointOnCurveConstraint::targetParameter;
 MObject PointOnCurveConstraint::targetUseFraction;
-MObject PointOnCurveConstraint::targetLoop;
 MObject PointOnCurveConstraint::targetCurve;
 
 MObject PointOnCurveConstraint::constraintTranslate;
@@ -109,7 +112,7 @@ Linearly interpolates the two given numbers using the supplied weight.
 };
 
 
-template<class N> N loop(const N value, const N min, const N max)
+template<class N> N cycle(const N value, const N min, const N max)
 /**
 Loops the supplied number to ensure it is within range.
 
@@ -162,6 +165,15 @@ Only these values should be used when performing computations!
 
 		// Get input data handles
 		//
+		MDataHandle parameterHandle = data.inputValue(PointOnCurveConstraint::parameter, &status);
+		CHECK_MSTATUS_AND_RETURN_IT(status);
+
+		MDataHandle useFractionHandle = data.inputValue(PointOnCurveConstraint::useFraction, &status);
+		CHECK_MSTATUS_AND_RETURN_IT(status);
+
+		MDataHandle loopHandle = data.inputValue(PointOnCurveConstraint::loop, &status);
+		CHECK_MSTATUS_AND_RETURN_IT(status);
+
 		MDataHandle forwardVectorHandle = data.inputValue(PointOnCurveConstraint::forwardVector, &status);
 		CHECK_MSTATUS_AND_RETURN_IT(status);
 
@@ -209,6 +221,10 @@ Only these values should be used when performing computations!
 
 		// Get values from handles
 		//
+		double parameter = parameterHandle.asDouble();
+		bool useFraction = useFractionHandle.asBool();
+		bool loop = loopHandle.asBool();
+
 		WorldUpType worldUpType = WorldUpType(worldUpTypeHandle.asShort());
 		MVector worldUpVector = worldUpVectorHandle.asVector();
 		MMatrix worldUpMatrix = worldUpMatrixHandle.asMatrix();
@@ -248,12 +264,13 @@ Only these values should be used when performing computations!
 
 		// Iterate through targets
 		//
-		MDataHandle targetHandle, targetWeightHandle, targetParameterHandle, targetUseFractionHandle, targetLoopHandle, targetCurveHandle;
+		MDataHandle targetHandle, targetWeightHandle, targetParameterHandle, targetUseFractionHandle, targetOverrideParameterHandle, targetCurveHandle;
 
-		MObject curve;
-		MFnNurbsCurve fnCurve;
-		double parameter, initialParameter, minParameter, maxParameter;
-		bool looping, fractional;
+		MObject targetCurve;
+		MFnNurbsCurve fnTargetCurve;
+		double initialParameter, minParameter, maxParameter, targetParameter;
+		double fraction, curveLength, fractionalLength;
+		bool targetOverrideParameter, targetUseFraction;
 		MMatrix targetMatrix;
 		
 		for (unsigned int i = 0; i < targetCount; i++)
@@ -270,9 +287,9 @@ Only these values should be used when performing computations!
 			// Get target data handles
 			//
 			targetWeightHandle = targetHandle.child(PointOnCurveConstraint::targetWeight);
+			targetOverrideParameterHandle = targetHandle.child(PointOnCurveConstraint::targetOverrideParameter);
 			targetParameterHandle = targetHandle.child(PointOnCurveConstraint::targetParameter);
 			targetUseFractionHandle = targetHandle.child(PointOnCurveConstraint::targetUseFraction);
-			targetLoopHandle = targetHandle.child(PointOnCurveConstraint::targetLoop);
 			targetCurveHandle = targetHandle.child(PointOnCurveConstraint::targetCurve);
 
 			// Get weight value
@@ -281,36 +298,72 @@ Only these values should be used when performing computations!
 
 			// Get curve parameter range
 			//
-			curve = targetCurveHandle.asNurbsCurve();
+			targetCurve = targetCurveHandle.asNurbsCurve();
 
-			status = fnCurve.setObject(curve);
+			status = fnTargetCurve.setObject(targetCurve);
 			CHECK_MSTATUS_AND_RETURN_IT(status);
 
-			status = fnCurve.getKnotDomain(minParameter, maxParameter);
+			status = fnTargetCurve.getKnotDomain(minParameter, maxParameter);
 			CHECK_MSTATUS_AND_RETURN_IT(status);
 
 			// Interpret requested parameter
 			//
-			looping = targetLoopHandle.asBool();
-			fractional = targetUseFractionHandle.asBool();
-			initialParameter = targetParameterHandle.asDouble();
+			targetOverrideParameter = targetOverrideParameterHandle.asBool();
+			targetUseFraction = targetOverrideParameter ? targetUseFractionHandle.asBool() : useFraction;
+			initialParameter = targetOverrideParameter ? targetParameterHandle.asDouble() : parameter;
 
-			if (looping)
+			if (loop)
 			{
 
-				parameter = loop(fractional ? lerp(minParameter, maxParameter, initialParameter) : initialParameter, minParameter, maxParameter);
+				if (targetUseFraction)
+				{
+
+					curveLength = fnTargetCurve.length(1e-3);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+					fraction = cycle(initialParameter, 0.0, 1.0);
+					fractionalLength = curveLength * fraction;
+
+					targetParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+				}
+				else
+				{
+
+					targetParameter = cycle(initialParameter, minParameter, maxParameter);
+
+				}
 
 			}
 			else
 			{
 
-				parameter = fractional ? lerp(minParameter, maxParameter, limit(initialParameter, 0.0, 1.0)) : limit(initialParameter, minParameter, maxParameter);
+				if (targetUseFraction)
+				{
+
+					curveLength = fnTargetCurve.length(1e-3);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+					fraction = limit(initialParameter, 0.0, 1.0);
+					fractionalLength = curveLength * fraction;
+
+					targetParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+				}
+				else
+				{
+
+					targetParameter = limit(initialParameter, minParameter, maxParameter);
+
+				}
 
 			}
 
 			// Create matrix from curve at parameter
 			//
-			status = PointOnCurveConstraint::createMatrixFromCurve(curve, parameter, axisSettings, targetMatrix);
+			status = PointOnCurveConstraint::createMatrixFromCurve(targetCurve, targetParameter, axisSettings, targetMatrix);
 			CHECK_MSTATUS_AND_RETURN_IT(status);
 
 			targetMatrices[i] = targetMatrix;
@@ -1248,6 +1301,28 @@ Use this function to define any static attributes.
 	MFnMatrixAttribute fnMatrixAttr;
 
 	// Input attributes:
+	// ".parameter" attribute
+	//
+	PointOnCurveConstraint::parameter = fnNumericAttr.create("parameter", "p", MFnNumericData::kDouble, 0.0f, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	CHECK_MSTATUS(fnNumericAttr.setMin(0.0));
+	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
+
+	// ".useFraction" attribute
+	//
+	PointOnCurveConstraint::useFraction = fnNumericAttr.create("useFraction", "uf", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
+
+	// ".loop" attribute
+	//
+	PointOnCurveConstraint::loop = fnNumericAttr.create("loop", "lp", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
+
 	// ".forwardVectorX" attribute
 	//
 	PointOnCurveConstraint::forwardVectorX = fnNumericAttr.create("forwardVectorX", "fvx", MFnNumericData::kDouble, 1.0, &status);
@@ -1553,6 +1628,14 @@ Use this function to define any static attributes.
 	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
 	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::targetCategory));
 
+	// ".targetOverrideParameter" attribute
+	//
+	PointOnCurveConstraint::targetOverrideParameter = fnNumericAttr.create("targetOverrideParameter", "top", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
+	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::targetCategory));
+
 	// ".targetParameter" attribute
 	//
 	PointOnCurveConstraint::targetParameter = fnNumericAttr.create("targetParameter", "tp", MFnNumericData::kDouble, 0.0f, &status);
@@ -1570,14 +1653,6 @@ Use this function to define any static attributes.
 	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
 	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::targetCategory));
 	
-	// ".targetLoop" attribute
-	//
-	PointOnCurveConstraint::targetLoop = fnNumericAttr.create("targetLoop", "tl", MFnNumericData::kBoolean, false, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-
-	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::inputCategory));
-	CHECK_MSTATUS(fnNumericAttr.addToCategory(PointOnCurveConstraint::targetCategory));
-
 	// ".targetCurve" attribute
 	//
 	PointOnCurveConstraint::targetCurve = fnTypedAttr.create("targetCurve", "tc", MFnData::kNurbsCurve, MObject::kNullObj, &status);
@@ -1592,9 +1667,9 @@ Use this function to define any static attributes.
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
 	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetWeight));
+	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetOverrideParameter));
 	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetParameter));
 	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetUseFraction));
-	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetLoop));
 	CHECK_MSTATUS(fnCompoundAttr.addChild(PointOnCurveConstraint::targetCurve));
 	CHECK_MSTATUS(fnCompoundAttr.setArray(true));
 	CHECK_MSTATUS(fnCompoundAttr.addToCategory(PointOnCurveConstraint::inputCategory));
@@ -1711,6 +1786,9 @@ Use this function to define any static attributes.
 
 	// Add attributes
 	//
+	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::parameter));
+	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::useFraction));
+	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::loop));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::forwardVector));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::upVector));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::worldUpType));
@@ -1722,6 +1800,7 @@ Use this function to define any static attributes.
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::offsetTranslate));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::offsetRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::target));
+
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::constraintTranslate));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::constraintRotateOrder));
 	CHECK_MSTATUS(PointOnCurveConstraint::addAttribute(PointOnCurveConstraint::constraintRotate));
@@ -1739,7 +1818,8 @@ Use this function to define any static attributes.
 
 	unsigned int numChildren = fnCompoundAttr.numChildren();
 
-	for (unsigned int i = 0; i < numChildren; i++) {
+	for (unsigned int i = 0; i < numChildren; i++)
+	{
 
 		MObject child = fnCompoundAttr.child(i);
 

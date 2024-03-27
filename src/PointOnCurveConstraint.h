@@ -119,6 +119,9 @@ public:
 
 public:
 
+	static	MObject			parameter;
+	static	MObject			useFraction;
+	static	MObject			loop;
 	static	MObject			forwardVector;
 	static	MObject			forwardVectorX;
 	static	MObject			forwardVectorY;
@@ -153,9 +156,9 @@ public:
 
 	static  MObject			target;
 	static  MObject			targetWeight;
+	static  MObject			targetOverrideParameter;
 	static  MObject			targetParameter;
 	static  MObject			targetUseFraction;
-	static  MObject			targetLoop;
 	static  MObject			targetCurve;
 
 	static	MObject			constraintTranslate;
