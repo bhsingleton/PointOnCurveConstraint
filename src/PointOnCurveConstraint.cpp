@@ -502,20 +502,21 @@ Samples the supplied curve at the specified parameter.
 	status = PointOnCurveConstraint::getUpVector(curve, parameter, settings.worldUpSettings, origin, upVector);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
+	MVector rightVector = (forwardVector ^ upVector).normal();
+	MVector safeUpVector = (rightVector ^ forwardVector).normal();
+
 	// Compose matrix
 	//
 	MVector forwardAxis = settings.forwardAxis.normal();
-	MVector rightAxis = (forwardAxis ^ settings.upAxis.normal()).normal();
-	MVector upAxis = (rightAxis ^ forwardAxis).normal();
-	MMatrix axisMatrix = PointOnCurveConstraint::composeMatrix(forwardAxis, upAxis, rightAxis, MPoint::origin);
+	MQuaternion forwardQuat = MQuaternion(forwardAxis, forwardVector);
+	MMatrix forwardMatrix = forwardQuat.asMatrix();
 
-	MVector rightVector = (forwardVector ^ upVector).normal();
-	MVector altUpVector = (rightVector ^ forwardVector).normal();
-	MMatrix aimMatrix = PointOnCurveConstraint::composeMatrix(forwardVector, altUpVector, rightVector, origin);
-
+	MVector upAxis = settings.upAxis.normal() * forwardMatrix;
+	MQuaternion upQuat = MQuaternion(upAxis, safeUpVector);
+	MMatrix upMatrix = upQuat.asMatrix();
 	MMatrix twistMatrix = MQuaternion(settings.twistAngle.asRadians(), forwardAxis).asMatrix();
 
-	matrix = twistMatrix * axisMatrix * aimMatrix;
+	matrix = twistMatrix * (forwardMatrix * upMatrix) * PointOnCurveConstraint::createPositionMatrix(origin);
 
 	return status;
 
@@ -1840,35 +1841,28 @@ Use this function to define any static attributes.
 
 	}
 
-	// Define rest attribute relationships
-	//
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restTranslate, PointOnCurveConstraint::constraintTranslate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restTranslateX, PointOnCurveConstraint::constraintTranslateX));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restTranslateY, PointOnCurveConstraint::constraintTranslateY));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restTranslateZ, PointOnCurveConstraint::constraintTranslateZ));
-
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restRotate, PointOnCurveConstraint::constraintRotate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restRotateX, PointOnCurveConstraint::constraintRotateX));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restRotateY, PointOnCurveConstraint::constraintRotateY));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restRotateZ, PointOnCurveConstraint::constraintRotateZ));
-
 	// Define constraint attribute relationships
 	//
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::parameter, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::useFraction, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::loop, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::forwardVector, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::forwardVector, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::upVector, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::worldUpType, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::worldUpVector, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::worldUpMatrix, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::twist, PointOnCurveConstraint::constraintRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintRotateOrder, PointOnCurveConstraint::constraintRotate));
-
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintJointOrient, PointOnCurveConstraint::constraintRotate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintJointOrientX, PointOnCurveConstraint::constraintRotateX));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintJointOrientY, PointOnCurveConstraint::constraintRotateY));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintJointOrientZ, PointOnCurveConstraint::constraintRotateZ));
-
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::offsetTranslate, PointOnCurveConstraint::constraintTranslate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::offsetRotate, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::enableRestPosition, PointOnCurveConstraint::constraintTranslate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::enableRestPosition, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restTranslate, PointOnCurveConstraint::constraintTranslate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::restRotate, PointOnCurveConstraint::constraintRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintTranslate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintTranslateX));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintTranslateY));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintTranslateZ));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintRotate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintRotateX));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintRotateY));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintRotateZ));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintMatrix));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintInverseMatrix));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::constraintParentInverseMatrix, PointOnCurveConstraint::constraintWorldMatrix));
