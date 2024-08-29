@@ -504,19 +504,38 @@ Samples the supplied curve at the specified parameter.
 
 	MVector rightVector = (forwardVector ^ upVector).normal();
 	MVector safeUpVector = (rightVector ^ forwardVector).normal();
-
-	// Compose matrix
+	
+	// Initialize transform matrix
 	//
-	MVector forwardAxis = settings.forwardAxis.normal();
-	MQuaternion forwardQuat = MQuaternion(forwardAxis, forwardVector);
-	MMatrix forwardMatrix = forwardQuat.asMatrix();
+	MTransformationMatrix transformationMatrix = MTransformationMatrix();
 
-	MVector upAxis = settings.upAxis.normal() * forwardMatrix;
+	status = transformationMatrix.setTranslation(origin, MSpace::kTransform);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	// Next, rotate up-axis towards up-vector
+	//
+	MVector upAxis = settings.upAxis.normal() * transformationMatrix.asMatrix();
 	MQuaternion upQuat = MQuaternion(upAxis, safeUpVector);
-	MMatrix upMatrix = upQuat.asMatrix();
-	MMatrix twistMatrix = MQuaternion(settings.twistAngle.asRadians(), forwardAxis).asMatrix();
 
-	matrix = twistMatrix * (forwardMatrix * upMatrix) * PointOnCurveConstraint::createPositionMatrix(origin);
+	transformationMatrix.rotateBy(upQuat, MSpace::kTransform, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	// Next, rotate forward-axis towards forward-vector
+	//
+	MVector forwardAxis = settings.forwardAxis.normal() * transformationMatrix.asMatrix();
+	MQuaternion forwardQuat = MQuaternion(forwardAxis, forwardVector);
+
+	transformationMatrix.rotateBy(forwardQuat, MSpace::kTransform, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	// Finally, twist around forward-axis
+	//
+	MQuaternion twistQuat = MQuaternion(settings.twistAngle.asRadians(), forwardVector);
+
+	transformationMatrix.rotateBy(twistQuat, MSpace::kTransform, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+
+	matrix = transformationMatrix.asMatrix();
 
 	return status;
 
@@ -1843,10 +1862,12 @@ Use this function to define any static attributes.
 
 	// Define constraint attribute relationships
 	//
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::parameter, PointOnCurveConstraint::constraintTranslate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::parameter, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::useFraction, PointOnCurveConstraint::constraintTranslate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::useFraction, PointOnCurveConstraint::constraintRotate));
+	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::loop, PointOnCurveConstraint::constraintTranslate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::loop, PointOnCurveConstraint::constraintRotate));
-	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::forwardVector, PointOnCurveConstraint::constraintRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::forwardVector, PointOnCurveConstraint::constraintRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::upVector, PointOnCurveConstraint::constraintRotate));
 	CHECK_MSTATUS(PointOnCurveConstraint::attributeAffects(PointOnCurveConstraint::worldUpType, PointOnCurveConstraint::constraintRotate));
