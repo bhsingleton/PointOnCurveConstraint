@@ -372,9 +372,9 @@ Only these values should be used when performing computations!
 
 		// Calculate weighted constraint matrix
 		//
-		MMatrix matrix = PointOnCurveConstraint::blendMatrices(restWorldMatrix, targetMatrices, targetWeights);
+		MMatrix worldMatrix = PointOnCurveConstraint::blendMatrices(restWorldMatrix, targetMatrices, targetWeights);
 
-		MMatrix constraintWorldMatrix = offsetMatrix * matrix;
+		MMatrix constraintWorldMatrix = offsetMatrix * worldMatrix;
 		MMatrix constraintMatrix = constraintWorldMatrix * constraintParentInverseMatrix;
 
 		// Get output data handles
@@ -918,9 +918,9 @@ Returns the rotation component from the supplied transform matrix.
 */
 {
 
-	MVector xAxis = MVector(matrix(0, 0), matrix(0, 1), matrix(0, 2));
-	MVector yAxis = MVector(matrix(1, 0), matrix(1, 1), matrix(1, 2));
-	MVector zAxis = MVector(matrix(2, 0), matrix(2, 1), matrix(2, 2));
+	MVector xAxis = MVector(matrix(0, 0), matrix(0, 1), matrix(0, 2)).normal();
+	MVector yAxis = MVector(matrix(1, 0), matrix(1, 1), matrix(1, 2)).normal();
+	MVector zAxis = MVector(matrix(2, 0), matrix(2, 1), matrix(2, 2)).normal();
 
 	double matrixRows[4][4] = {
 		{ xAxis.x, xAxis.y, xAxis.z, 0.0 },
