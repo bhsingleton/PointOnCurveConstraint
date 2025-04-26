@@ -8,6 +8,7 @@
 
 #include "PointOnCurveConstraint.h"
 
+#define	IS_CLOSE_TOLERANCE		1e-3
 
 MObject PointOnCurveConstraint::parameter;
 MObject PointOnCurveConstraint::useFraction;
@@ -128,6 +129,37 @@ Loops the supplied number to ensure it is within range.
 	long quotient = static_cast<long>(std::floor(division));
 
 	return value - (range * static_cast<N>(quotient));
+
+};
+
+
+template<class N> bool isClose(const N a, const N b, const double tolerance)
+/**
+Evaluates if the two supplied values are relatively close.
+
+@param a: The first number.
+@param b: The second number.
+@param tolerance: The maximum allowed difference between a and b.
+@return: Yes or no.
+*/
+{
+
+	return std::abs(a - b) <= std::abs(tolerance);
+
+};
+
+
+template<class N> bool isClose(const N a, const N b)
+/**
+Evaluates if the two supplied values are relatively close.
+
+@param a: The first number.
+@param b: The second number.
+@return: Yes or no.
+*/
+{
+
+	return isClose(a, b, IS_CLOSE_TOLERANCE);
 
 };
 
@@ -268,11 +300,11 @@ Only these values should be used when performing computations!
 
 		MObject targetCurve;
 		MFnNurbsCurve fnTargetCurve;
-		double initialParameter, minParameter, maxParameter, targetParameter;
+		double minParameter, maxParameter, initialParameter, preferredParameter, targetParameter;
 		double fraction, curveLength, fractionalLength;
 		bool targetOverrideParameter, targetUseFraction;
 		MMatrix targetMatrix;
-		
+
 		for (unsigned int i = 0; i < targetCount; i++)
 		{
 
@@ -297,19 +329,18 @@ Only these values should be used when performing computations!
 			targetWeights[i] = limit(targetWeightHandle.asFloat(), 0.0f, 1.0f);
 
 			// Get curve parameter range
+			// Make sure trim the range to avoid dodgy tangent vectors!
 			//
 			targetCurve = targetCurveHandle.asNurbsCurve();
 
 			status = fnTargetCurve.setObject(targetCurve);
 			CHECK_MSTATUS_AND_RETURN_IT(status);
 
-			status = fnTargetCurve.getKnotDomain(minParameter, maxParameter);
-			CHECK_MSTATUS_AND_RETURN_IT(status);
-
 			// Interpret requested parameter
 			//
 			targetOverrideParameter = targetOverrideParameterHandle.asBool();
 			targetUseFraction = targetOverrideParameter ? targetUseFractionHandle.asBool() : useFraction;
+
 			initialParameter = targetOverrideParameter ? targetParameterHandle.asDouble() : parameter;
 
 			if (loop)
@@ -324,14 +355,23 @@ Only these values should be used when performing computations!
 					fraction = cycle(initialParameter, 0.0, 1.0);
 					fractionalLength = curveLength * fraction;
 
-					targetParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					preferredParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+					targetParameter = PointOnCurveConstraint::clampCurveParameter(targetCurve, preferredParameter, &status);
 					CHECK_MSTATUS_AND_RETURN_IT(status);
 
 				}
 				else
 				{
 
-					targetParameter = cycle(initialParameter, minParameter, maxParameter);
+					status = fnTargetCurve.getKnotDomain(minParameter, maxParameter);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+					preferredParameter = cycle(initialParameter, minParameter, maxParameter);
+
+					targetParameter = PointOnCurveConstraint::clampCurveParameter(targetCurve, preferredParameter, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
 
 				}
 
@@ -348,14 +388,18 @@ Only these values should be used when performing computations!
 					fraction = limit(initialParameter, 0.0, 1.0);
 					fractionalLength = curveLength * fraction;
 
-					targetParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					preferredParameter = fnTargetCurve.findParamFromLength(fractionalLength, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
+
+					targetParameter = PointOnCurveConstraint::clampCurveParameter(targetCurve, preferredParameter, &status);
 					CHECK_MSTATUS_AND_RETURN_IT(status);
 
 				}
 				else
 				{
 
-					targetParameter = limit(initialParameter, minParameter, maxParameter);
+					targetParameter = PointOnCurveConstraint::clampCurveParameter(targetCurve, initialParameter, &status);
+					CHECK_MSTATUS_AND_RETURN_IT(status);
 
 				}
 
@@ -553,22 +597,28 @@ Returns a clamped parameter based on the supplied curve.
 */
 {
 
-	// Initialize function set
-	//
 	MFnNurbsCurve fnCurve(curve, status);
 	CHECK_MSTATUS_AND_RETURN(*status, parameter);
 
-	// Get curve parameter range
-	//
 	double minParameter, maxParameter;
 
 	*status = fnCurve.getKnotDomain(minParameter, maxParameter);
 	CHECK_MSTATUS_AND_RETURN(*status, parameter);
 
-	// Clamp parameter within range
-	//
-	return limit(parameter, (minParameter + 1e-3), (maxParameter - 1e-3));
+	MFnNurbsCurve::Form form = fnCurve.form(status);
+	CHECK_MSTATUS_AND_RETURN(*status, parameter);
 
+	switch (form)
+	{
+
+	case MFnNurbsCurve::Form::kOpen:
+		return limit(parameter, minParameter + 1e-3, maxParameter - 1e-3);
+
+	default:
+		return parameter;  // Closed curves don't require clamping!
+
+	}
+	
 };
 
 
